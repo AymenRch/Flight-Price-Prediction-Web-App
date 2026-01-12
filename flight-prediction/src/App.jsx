@@ -1,7 +1,6 @@
 // src/FlightPricePredictor.js
 
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect } from 'react';
 
 function FlightPricePredictor() {
   const [formData, setFormData] = useState({
@@ -15,7 +14,16 @@ function FlightPricePredictor() {
     departure_date: '',
   });
 
+  const [model, setModel] = useState(null);
   const [prediction, setPrediction] = useState(null);
+
+  // Load linear_model.json once
+  useEffect(() => {
+  fetch('/linear_model.json')
+    .then(res => res.json())
+    .then(data => setModel(data))
+    .catch(err => console.error('Model load error:', err));
+}, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -24,14 +32,68 @@ function FlightPricePredictor() {
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await axios.post('http://127.0.0.1:5000/predict', formData);
-      setPrediction(response.data.prediction);
-    } catch (error) {
-      console.error('Error fetching prediction:', error);
+  const airlineDict = {
+  AirAsia: 0, Indigo: 1, GO_FIRST: 2, SpiceJet: 3, Air_India: 4, Vistara: 5
+};
+const sourceDict = {
+  Delhi: 0, Hyderabad: 1, Bangalore: 2, Mumbai: 3, Kolkata: 4, Chennai: 5
+};
+const departureDict = {
+  Early_Morning: 0, Morning: 1, Afternoon: 2, Evening: 3, Night: 4, Late_Night: 5
+};
+const stopsDict = { zero: 0, one: 1, two_or_more: 2 };
+const arrivalDict = {
+  Early_Morning: 0, Morning: 1, Afternoon: 2, Evening: 3, Night: 4, Late_Night: 5
+};
+const destinationDict = {
+  Delhi: 0, Hyderabad: 1, Mumbai: 2, Bangalore: 3, Chennai: 4, Kolkata: 5
+};
+const classDict = { Economy: 0, Business: 1 };
+
+
+  const encodeFeatures = (data) => {
+  const airline = airlineDict[data.airline];
+  const source_city = sourceDict[data.source_city];
+  const departure_time = departureDict[data.departure_time];
+  const stops = stopsDict[data.stops];
+  const arrival_time = arrivalDict[data.arrival_time];
+  const destination_city = destinationDict[data.destination_city];
+  const travel_class = classDict[data.class];
+
+  const today = new Date();
+  const dep = new Date(data.departure_date);
+  const dateDiff =
+    Math.floor((dep - today) / (1000 * 60 * 60 * 24)) + 1;
+
+  return [
+    airline,
+    source_city,
+    departure_time,
+    stops,
+    arrival_time,
+    destination_city,
+    travel_class,
+    dateDiff
+  ];
+};
+
+
+  const predict = (features, model) => {
+    const { coef, intercept } = model;
+    let y = intercept;
+    for (let i = 0; i < coef.length; i++) {
+      y += coef[i] * features[i];
     }
+    return Math.round(y);
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!model) return;
+
+    const features = encodeFeatures(formData);
+    const y = predict(features, model);
+    setPrediction(y);
   };
 
   return (
